@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Historical Risk & Return | MBA 6223</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f5f5; color: #333;
+        }
+        .header { background: #0d47a1; color: white; padding: 14px 24px; text-align: center; }
+        .header h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 1px; }
+        .header p { font-size: 0.82rem; opacity: 0.92; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px 16px; }
+
+        /* Controls */
+        .control-panel {
+            background: white; border-radius: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,.07);
+            padding: 16px; margin-bottom: 14px;
+        }
+        .control-row {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+        }
+        .control-group { min-width: 150px; }
+        .control-group label {
+            display: block; font-size: 0.75rem; font-weight: 700; color: #888;
+            text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px;
+        }
+        .control-group select {
+            width: 100%; padding: 8px; font-size: 0.92rem;
+            border: 2px solid #ddd; border-radius: 6px; outline: none;
+        }
+        .control-group select:focus { border-color: #0d47a1; }
+        .toggle-row {
+            display: flex; align-items: center; gap: 8px; margin-top: 4px;
+        }
+        .toggle-row label { font-size: 0.85rem; color: #555; cursor: pointer; }
+        .toggle-row input { accent-color: #0d47a1; cursor: pointer; }
+
+        /* Cards */
+        .card {
+            background: white; border-radius: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,.07); padding: 16px; margin-bottom: 14px;
+        }
+
+        /* Stats table */
+        .stats-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 14px; }
+        .stats-table th {
+            background: #f8f8f8; border-bottom: 2px solid #ddd;
+            padding: 8px; text-align: left; font-size: 0.72rem;
+            text-transform: uppercase; color: #888;
+        }
+        .stats-table td { padding: 7px 8px; border-bottom: 1px solid #eee; }
+        .stats-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .stats-table tr:hover { background: #fdf6f0; }
+        .stats-table .asset-dot {
+            width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+            margin-right: 6px; vertical-align: middle;
+        }
+
+        /* Insight */
+        .insight-box {
+            background: #e8f0fe; border: 1px solid #b3cce6; border-left: 4px solid #0d47a1;
+            border-radius: 8px; padding: 14px 18px; margin-bottom: 14px;
+            font-size: 0.88rem; line-height: 1.6;
+        }
+        .insight-box b { color: #0d47a1; }
+
+        /* Loading */
+        #loading { text-align: center; padding: 30px; font-size: 0.9rem; color: #777; }
+        .spin {
+            display: inline-block; width: 18px; height: 18px;
+            border: 3px solid #ddd; border-top-color: #0d47a1;
+            border-radius: 50%; animation: sp .7s linear infinite;
+            vertical-align: middle; margin-right: 6px;
+        }
+        @keyframes sp { to { transform: rotate(360deg); } }
+
+        .footer {
+            text-align: center; font-size: 0.7rem; color: #aaa;
+            padding: 12px 16px; line-height: 1.5;
+        }
+
+        #app { display: none; }
+
+        @media (max-width: 600px) {
+            .control-row { flex-direction: column; }
+            .stats-table { font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>📊 Historical Risk & Return (1927&ndash;2025)</h1>
+    <p>MBA 6223 Finance &mdash; The Ohio State University</p>
+</div>
+
+<div class="container">
+    <div id="loading"><span class="spin"></span> Loading data&hellip;</div>
+
+    <div id="app">
+        <!-- Controls -->
+        <div class="control-panel">
+            <div class="control-row">
+                <div class="control-group">
+                    <label>Highlight Asset</label>
+                    <select id="asset-select" onchange="refresh()">
+                        <option value="large_stocks" selected>Large Company Stocks</option>
+                        <option value="small_stocks">Small Company Stocks</option>
+                        <option value="lt_gov_bonds">Long-Term Gov Bonds</option>
+                        <option value="tbills">U.S. Treasury Bills</option>
+                        <option value="inflation">Inflation (CPI)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <div class="toggle-row">
+                        <input type="checkbox" id="real-toggle" onchange="refresh()">
+                        <label for="real-toggle">Show <b>real</b> returns (subtract inflation)</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary stats table -->
+        <div class="card">
+            <div id="stats-table-wrap"></div>
+        </div>
+
+        <!-- Annual return bar chart -->
+        <div class="card"><div id="chart-bars"></div></div>
+
+        <!-- Growth of $1 -->
+        <div class="card"><div id="chart-growth"></div></div>
+
+        <!-- Max drawdown -->
+        <div class="card"><div id="chart-drawdown"></div></div>
+
+        <!-- Risk-return scatter -->
+        <div class="card"><div id="chart-riskreturn"></div></div>
+
+        <!-- Return distribution histogram -->
+        <div class="card"><div id="chart-histogram"></div></div>
+
+        <!-- Insight -->
+        <div class="insight-box" id="insight-box"></div>
+
+        <!-- ======= NEW SECTIONS ======= -->
+
+        <!-- Rolling 12-Month Returns Histogram -->
+        <div class="card">
+            <div id="chart-rolling-hist"></div>
+            <div class="insight-box" id="rolling-insight" style="margin-top:10px;"></div>
+        </div>
+
+        <!-- Rolling 12-Month Equity Risk Premium Histogram -->
+        <div class="card">
+            <div id="chart-erp-hist"></div>
+            <div class="insight-box" id="erp-insight" style="margin-top:10px;"></div>
+        </div>
+
+        <!-- Japan Stock Market -->
+        <div class="card">
+            <div id="chart-japan"></div>
+            <div class="insight-box" id="japan-insight" style="margin-top:10px;"></div>
+        </div>
+
+        <!-- Shiller CAPE -->
+        <div class="card">
+            <div id="chart-cape"></div>
+            <div class="insight-box" id="cape-insight" style="margin-top:10px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    Stock returns: Fama-French factors (CRSP value-weighted, dividends reinvested) &middot;
+    Bonds: Ibbotson/SBBI long-term government bond total returns &middot;
+    T-Bills: Fama-French risk-free rate &middot; Inflation: BLS CPI-U<br>
+    All returns are nominal total returns unless "real" toggle is on. For educational use only.
+</div>
+
+<script>
+const COLORS = {
+    large_stocks: '#BB0000',
+    small_stocks: '#e74c3c',
+    lt_gov_bonds: '#4472C4',
+    tbills: '#2ecc71',
+    inflation: '#f39c12',
+};
+const plotCfg = { responsive: true, displayModeBar: false };
+
+let DATA = null;
+
+(async function() {
+    try {
+        const r = await fetch('returns_data.json');
+        if (r.ok) {
+            DATA = await r.json();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            refresh();
+        }
+    } catch(e) {
+        document.getElementById('loading').innerHTML = 'Failed to load returns_data.json';
+    }
+})();
+
+/* ================================================================= */
+/* HELPERS                                                            */
+/* ================================================================= */
+function getReturns(assetKey, real) {
+    const rets = DATA.assets[assetKey].returns.slice();
+    if (real && assetKey !== 'inflation') {
+        const infl = DATA.assets.inflation.returns;
+        for (let i = 0; i < rets.length; i++) {
+            if (rets[i] != null && infl[i] != null) {
+                // Real return = (1+nominal)/(1+inflation) - 1
+                rets[i] = round(((1 + rets[i]/100) / (1 + infl[i]/100) - 1) * 100, 2);
+            }
+        }
+    }
+    return rets;
+}
+
+function round(v, d) { const f = Math.pow(10, d); return Math.round(v * f) / f; }
+
+function validReturns(rets) { return rets.filter(r => r != null); }
+
+function arithmeticMean(rets) {
+    const v = validReturns(rets);
+    return v.reduce((a,b) => a+b, 0) / v.length;
+}
+
+function geometricMean(rets) {
+    const v = validReturns(rets);
+    let cum = 1;
+    for (const r of v) cum *= (1 + r / 100);
+    return (Math.pow(cum, 1 / v.length) - 1) * 100;
+}
+
+function stdDev(rets) {
+    const v = validReturns(rets);
+    const mean = v.reduce((a,b) => a+b, 0) / v.length;
+    const variance = v.reduce((a,r) => a + (r - mean)**2, 0) / (v.length - 1);
+    return Math.sqrt(variance);
+}
+
+function growthOf1(rets) {
+    const g = [1.0];
+    for (const r of rets) {
+        if (r != null) g.push(g[g.length-1] * (1 + r/100));
+        else g.push(g[g.length-1]);
+    }
+    return g;
+}
+
+/* ================================================================= */
+/* STATS TABLE                                                        */
+/* ================================================================= */
+function renderStatsTable(real) {
+    const keys = ['large_stocks', 'small_stocks', 'lt_gov_bonds', 'tbills', 'inflation'];
+    const suffix = real ? ' (real)' : '';
+
+    let html = `<table class="stats-table">
+        <thead><tr>
+            <th>Asset Class</th>
+            <th class="num">Arith. Mean</th>
+            <th class="num">Geom. Mean</th>
+            <th class="num">Std Dev</th>
+            <th class="num">Best Year</th>
+            <th class="num">Worst Year</th>
+            <th class="num">% Positive</th>
+        </tr></thead><tbody>`;
+
+    for (const key of keys) {
+        const asset = DATA.assets[key];
+        const rets = getReturns(key, real);
+        const v = validReturns(rets);
+        const am = arithmeticMean(rets);
+        const gm = geometricMean(rets);
+        const sd = stdDev(rets);
+        const best = Math.max(...v);
+        const worst = Math.min(...v);
+        const pctPos = (v.filter(r => r > 0).length / v.length * 100);
+
+        const bestYearIdx = rets.indexOf(best);
+        const worstYearIdx = rets.indexOf(worst);
+        const bestYear = DATA.years[bestYearIdx];
+        const worstYear = DATA.years[worstYearIdx];
+
+        const color = COLORS[key];
+        const label = key === 'inflation' && real ? 'Inflation' : asset.short + suffix;
+
+        html += `<tr>
+            <td><span class="asset-dot" style="background:${color}"></span>${label}</td>
+            <td class="num">${am.toFixed(1)}%</td>
+            <td class="num">${gm.toFixed(1)}%</td>
+            <td class="num">${sd.toFixed(1)}%</td>
+            <td class="num">+${best.toFixed(1)}% (${bestYear})</td>
+            <td class="num">${worst.toFixed(1)}% (${worstYear})</td>
+            <td class="num">${pctPos.toFixed(0)}%</td>
+        </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('stats-table-wrap').innerHTML = html;
+}
+
+/* ================================================================= */
+/* ANNUAL BAR CHART                                                   */
+/* ================================================================= */
+function plotBars(assetKey, real) {
+    const asset = DATA.assets[assetKey];
+    const rets = getReturns(assetKey, real);
+    const years = DATA.years;
+    const color = COLORS[assetKey];
+    const suffix = real ? ' (real)' : '';
+
+    const barColors = rets.map(r => r >= 0 ? color : '#333');
+
+    const trace = {
+        x: years, y: rets, type: 'bar', name: asset.short,
+        marker: { color: barColors },
+        hovertemplate: '%{x}: %{y:.1f}%<extra></extra>',
+    };
+
+    const layout = {
+        title: { text: `${asset.name}${suffix} \u2014 Annual Returns`, font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Year', gridcolor: '#eee', dtick: 10, tickformat: 'd' },
+        yaxis: { title: 'Annual Return (%)', gridcolor: '#eee',
+                 zeroline: true, zerolinecolor: '#999', zerolinewidth: 2 },
+        margin: { l: 56, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        showlegend: false,
+    };
+    Plotly.newPlot('chart-bars', [trace], layout, plotCfg);
+}
+
+/* ================================================================= */
+/* GROWTH OF $1                                                       */
+/* ================================================================= */
+function plotGrowth(real) {
+    const keys = ['large_stocks', 'small_stocks', 'lt_gov_bonds', 'tbills', 'inflation'];
+    const years = [DATA.years[0] - 1, ...DATA.years]; // Start year before first return
+    const suffix = real ? ' (real)' : '';
+    const traces = [];
+
+    for (const key of keys) {
+        const rets = getReturns(key, real);
+        const g = growthOf1(rets);
+        const asset = DATA.assets[key];
+        const finalVal = g[g.length - 1];
+        const label = key === 'inflation' && real ? 'Inflation' : asset.short;
+
+        traces.push({
+            x: years, y: g, mode: 'lines',
+            name: `${label}: $${finalVal >= 1000 ? Math.round(finalVal).toLocaleString() : finalVal.toFixed(2)}`,
+            line: { color: COLORS[key], width: key === 'large_stocks' || key === 'small_stocks' ? 2.5 : 1.8 },
+            hovertemplate: `${label}: $%{y:.2f}<extra></extra>`,
+        });
+    }
+
+    const layout = {
+        title: { text: `Growth of $1 (${DATA.years[0]}\u2013${DATA.years[DATA.years.length-1]})${suffix}`,
+                 font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Year', gridcolor: '#eee', dtick: 10, tickformat: 'd' },
+        yaxis: { title: 'Value ($, log scale)', type: 'log', gridcolor: '#eee' },
+        showlegend: true,
+        legend: { x: .02, y: .98, bgcolor: 'rgba(255,255,255,.9)', bordercolor: '#ddd', borderwidth: 1, font: { size: 11 } },
+        margin: { l: 60, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        shapes: [{
+            type: 'line', x0: years[0], x1: years[years.length-1],
+            y0: 1, y1: 1, line: { color: '#aaa', width: 1, dash: 'dash' },
+        }],
+    };
+    Plotly.newPlot('chart-growth', traces, layout, plotCfg);
+}
+
+/* ================================================================= */
+/* DRAWDOWN                                                           */
+/* ================================================================= */
+function drawdownSeries(rets) {
+    // Returns array of drawdown % (always <= 0) from peak wealth
+    const g = growthOf1(rets);
+    const dd = [];
+    let peak = g[0];
+    for (let i = 0; i < g.length; i++) {
+        if (g[i] > peak) peak = g[i];
+        dd.push((g[i] / peak - 1) * 100);
+    }
+    return dd;
+}
+
+function plotDrawdown(real) {
+    const keys = ['large_stocks', 'small_stocks', 'lt_gov_bonds', 'tbills'];
+    const years = [DATA.years[0] - 1, ...DATA.years];
+    const suffix = real ? ' (real)' : '';
+    const traces = [];
+
+    for (const key of keys) {
+        const rets = getReturns(key, real);
+        const dd = drawdownSeries(rets);
+        const asset = DATA.assets[key];
+        const maxDD = Math.min(...dd);
+
+        traces.push({
+            x: years, y: dd, mode: 'lines',
+            name: `${asset.short} (max: ${maxDD.toFixed(0)}%)`,
+            line: { color: COLORS[key], width: key === 'large_stocks' || key === 'small_stocks' ? 2 : 1.5 },
+            fill: key === 'large_stocks' ? 'tozeroy' : 'none',
+            fillcolor: key === 'large_stocks' ? `${COLORS[key]}18` : undefined,
+            hovertemplate: `${asset.short}: %{y:.1f}%<extra></extra>`,
+        });
+    }
+
+    const layout = {
+        title: { text: `Drawdown from Peak${suffix}`, font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Year', gridcolor: '#eee', dtick: 10, tickformat: 'd' },
+        yaxis: { title: 'Drawdown (%)', gridcolor: '#eee',
+                 zeroline: true, zerolinecolor: '#999', zerolinewidth: 2 },
+        showlegend: true,
+        legend: { x: .02, y: -.15, orientation: 'h', bgcolor: 'rgba(255,255,255,.9)', font: { size: 11 } },
+        margin: { l: 56, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+    };
+    Plotly.newPlot('chart-drawdown', traces, layout, plotCfg);
+}
+
+/* ================================================================= */
+/* RISK-RETURN SCATTER                                                */
+/* ================================================================= */
+function plotRiskReturn(real) {
+    const keys = ['large_stocks', 'small_stocks', 'lt_gov_bonds', 'tbills', 'inflation'];
+    const suffix = real ? ' (real)' : '';
+
+    const x = [], y = [], text = [], colors = [];
+    for (const key of keys) {
+        const rets = getReturns(key, real);
+        const gm = geometricMean(rets);
+        const sd = stdDev(rets);
+        const label = key === 'inflation' && real ? 'Inflation' : DATA.assets[key].short;
+        x.push(sd);
+        y.push(gm);
+        text.push(label);
+        colors.push(COLORS[key]);
+    }
+
+    const trace = {
+        x, y, text, mode: 'markers+text', type: 'scatter',
+        marker: { size: 16, color: colors, line: { color: 'white', width: 2 } },
+        textposition: 'top center',
+        textfont: { size: 11, color: '#333' },
+        hovertemplate: '%{text}<br>Risk: %{x:.1f}%<br>Return: %{y:.1f}%<extra></extra>',
+    };
+
+    const layout = {
+        title: { text: `Risk vs Return${suffix}`, font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Risk (Std Dev of Annual Returns, %)', gridcolor: '#eee', rangemode: 'tozero' },
+        yaxis: { title: 'Geometric Mean Return (%)', gridcolor: '#eee' },
+        margin: { l: 60, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        showlegend: false,
+        height: 400,
+    };
+    Plotly.newPlot('chart-riskreturn', [trace], layout, plotCfg);
+}
+
+/* ================================================================= */
+/* HISTOGRAM                                                          */
+/* ================================================================= */
+function plotHistogram(assetKey, real) {
+    const asset = DATA.assets[assetKey];
+    const rets = getReturns(assetKey, real);
+    const v = validReturns(rets);
+    const suffix = real ? ' (real)' : '';
+    const color = COLORS[assetKey];
+
+    const lo = Math.floor(Math.min(...v) / 5) * 5 - 5;
+    const hi = Math.ceil(Math.max(...v) / 5) * 5 + 5;
+
+    // Use different bin sizes depending on range
+    const range = hi - lo;
+    const binSize = range > 80 ? 5 : range > 40 ? 3 : 2;
+
+    const trace = {
+        x: v, type: 'histogram',
+        marker: { color: color.replace(')', ',0.6)').replace('rgb', 'rgba').replace('#', ''),
+                  line: { color: color, width: 1 } },
+        xbins: { start: lo, end: hi, size: binSize },
+        hovertemplate: '%{x:.0f}% bin: %{y} years<extra></extra>',
+    };
+
+    // Fix color for hex
+    const traceFixed = {
+        x: v, type: 'histogram', name: asset.short,
+        marker: { color: `${color}88`, line: { color: color, width: 1 } },
+        xbins: { start: lo, end: hi, size: binSize },
+        hovertemplate: '%{x:.0f}% bin: %{y} years<extra></extra>',
+    };
+
+    const mean = arithmeticMean(rets);
+
+    const layout = {
+        title: { text: `${asset.name}${suffix} \u2014 Distribution of Annual Returns`, font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Annual Return (%)', gridcolor: '#eee' },
+        yaxis: { title: 'Number of Years', gridcolor: '#eee' },
+        margin: { l: 50, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        showlegend: false,
+        shapes: [
+            { type: 'line', x0: mean, x1: mean, y0: 0, y1: 1, yref: 'paper',
+              line: { color: color, width: 2, dash: 'dash' } },
+        ],
+        annotations: [
+            { x: mean, y: 1.02, yref: 'paper',
+              text: `Mean: ${mean.toFixed(1)}%`,
+              showarrow: false, font: { size: 11, color: color } },
+        ],
+    };
+    Plotly.newPlot('chart-histogram', [traceFixed], layout, plotCfg);
+}
+
+/* ================================================================= */
+/* INSIGHT                                                            */
+/* ================================================================= */
+function showInsight(assetKey, real) {
+    const suffix = real ? ' real' : ' nominal';
+    const rets = getReturns(assetKey, real);
+    const asset = DATA.assets[assetKey];
+    const v = validReturns(rets);
+    const gm = geometricMean(rets);
+    const sd = stdDev(rets);
+    const years = DATA.years.length;
+    const pctPos = (v.filter(r => r > 0).length / v.length * 100).toFixed(0);
+    const g = growthOf1(rets);
+    const final$ = g[g.length - 1];
+
+    let msg = `<b>${asset.name}</b> (${suffix.trim()}): Over ${years} years, $1 grew to <b>$${final$ >= 100 ? Math.round(final$).toLocaleString() : final$.toFixed(2)}</b>. `;
+    msg += `The geometric mean return was <b>${gm.toFixed(1)}%</b>/year with a standard deviation of <b>${sd.toFixed(1)}%</b>. `;
+    msg += `Returns were positive in <b>${pctPos}%</b> of years.`;
+
+    // The Price of Sleeping Well — risk-return tradeoff
+    if (assetKey === 'large_stocks' || assetKey === 'small_stocks') {
+        const billGm = geometricMean(getReturns('tbills', real));
+        const bondGm = geometricMean(getReturns('lt_gov_bonds', real));
+        const billG = growthOf1(getReturns('tbills', real));
+        const billFinal = billG[billG.length - 1];
+        const eqPremium = gm - billGm;
+        msg += `<br><br><b>The price of sleeping well:</b> T-bills returned a safe <b>${billGm.toFixed(1)}%</b>/year ($1 \u2192 $${billFinal >= 100 ? Math.round(billFinal).toLocaleString() : billFinal.toFixed(2)}), `;
+        msg += `while stocks earned <b>${eqPremium.toFixed(1)} percentage points more</b> per year \u2014 `;
+        msg += `but with gut-wrenching volatility (worst year: <b>${Math.min(...v).toFixed(1)}%</b>). `;
+        msg += `That extra return is the <b>equity risk premium</b>: compensation for enduring those bad years.`;
+    }
+
+    if (assetKey === 'lt_gov_bonds') {
+        const stockGm = geometricMean(getReturns('large_stocks', real));
+        const stockSd = stdDev(getReturns('large_stocks', real));
+        msg += `<br><br><b>Bonds vs. stocks:</b> Bonds earned <b>${gm.toFixed(1)}%</b>/year vs stocks' <b>${stockGm.toFixed(1)}%</b>. `;
+        msg += `That gap seems small year-to-year, but compounding over ${years} years turned it into an enormous difference in terminal wealth. `;
+        msg += `The tradeoff? Bond volatility (<b>${sd.toFixed(1)}%</b>) was much lower than stocks (<b>${stockSd.toFixed(1)}%</b>).`;
+    }
+
+    if (assetKey === 'tbills') {
+        const inflGm = geometricMean(DATA.assets.inflation.returns);
+        const realBill = ((1 + gm/100)/(1 + inflGm/100) - 1) * 100;
+        msg += `<br><br><b>Safety has a cost:</b> T-bills barely outpaced inflation (<b>${inflGm.toFixed(1)}%</b>/year), `;
+        msg += `leaving a real return of only ~<b>${realBill.toFixed(1)}%</b>/year. `;
+        msg += `Safe assets preserve capital but don't build wealth.`;
+    }
+
+    if (assetKey === 'inflation') {
+        msg += `<br><br><b>The silent tax:</b> At <b>${gm.toFixed(1)}%</b>/year, inflation cut purchasing power by more than half every 25 years. `;
+        msg += `This is why simply holding cash (or a mattress full of money) is not "safe" \u2014 you're guaranteed to lose purchasing power.`;
+    }
+
+    if (real) {
+        const nomGm = geometricMean(getReturns(assetKey, false));
+        const inflGm = geometricMean(DATA.assets.inflation.returns);
+        msg += `<br><br><b>Inflation impact:</b> Of the ${nomGm.toFixed(1)}% nominal return, inflation consumed ~${inflGm.toFixed(1)}%/year, leaving <b>${gm.toFixed(1)}% real</b> purchasing power growth.`;
+    }
+
+    document.getElementById('insight-box').innerHTML = msg;
+}
+
+/* ================================================================= */
+/* ROLLING 12-MONTH RETURNS HISTOGRAM                                 */
+/* ================================================================= */
+function computeRolling12(monthlyReturns) {
+    // Compute rolling 12-month total returns from monthly % returns
+    const rolling = [];
+    for (let i = 11; i < monthlyReturns.length; i++) {
+        let cum = 1;
+        for (let j = i - 11; j <= i; j++) cum *= (1 + monthlyReturns[j] / 100);
+        rolling.push(round((cum - 1) * 100, 2));
+    }
+    return rolling;
+}
+
+function plotRollingHist() {
+    const m = DATA.monthly;
+    const rolling = computeRolling12(m.stocks);
+
+    const trace = {
+        x: rolling, type: 'histogram', name: 'Rolling 12-Mo Return',
+        marker: { color: '#BB000066', line: { color: '#BB0000', width: 1 } },
+        xbins: { size: 1 },
+        hovertemplate: '%{x:.0f}%: %{y} observations<extra></extra>',
+    };
+
+    const mean = rolling.reduce((a,b) => a+b, 0) / rolling.length;
+    const negPct = (rolling.filter(r => r < 0).length / rolling.length * 100).toFixed(0);
+
+    const layout = {
+        title: { text: 'U.S. Stocks \u2014 Rolling 12-Month Returns (1% bins, monthly)', font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Trailing 12-Month Return (%)', gridcolor: '#eee' },
+        yaxis: { title: 'Number of Months', gridcolor: '#eee' },
+        margin: { l: 50, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        showlegend: false,
+        shapes: [
+            { type: 'line', x0: 0, x1: 0, y0: 0, y1: 1, yref: 'paper',
+              line: { color: '#333', width: 2, dash: 'dash' } },
+            { type: 'line', x0: mean, x1: mean, y0: 0, y1: 1, yref: 'paper',
+              line: { color: '#BB0000', width: 2, dash: 'dot' } },
+        ],
+        annotations: [
+            { x: mean, y: 1.02, yref: 'paper',
+              text: `Mean: ${mean.toFixed(1)}%`, showarrow: false,
+              font: { size: 11, color: '#BB0000' } },
+        ],
+    };
+    Plotly.newPlot('chart-rolling-hist', [trace], layout, plotCfg);
+
+    document.getElementById('rolling-insight').innerHTML =
+        `<b>Rolling 12-month stock returns</b> (${rolling.length} overlapping periods since 1927): ` +
+        `The average trailing-year return was <b>${mean.toFixed(1)}%</b>. ` +
+        `Stocks delivered negative 12-month returns in <b>${negPct}%</b> of months. ` +
+        `The range is enormous: from <b>${Math.min(...rolling).toFixed(0)}%</b> to <b>+${Math.max(...rolling).toFixed(0)}%</b>. ` +
+        `This is the uncertainty equity investors live with.`;
+}
+
+/* ================================================================= */
+/* ROLLING 12-MONTH EQUITY RISK PREMIUM HISTOGRAM                     */
+/* ================================================================= */
+function plotERPHist() {
+    const m = DATA.monthly;
+    const stockRolling = computeRolling12(m.stocks);
+    const billRolling = computeRolling12(m.tbills);
+    const n = Math.min(stockRolling.length, billRolling.length);
+    const erp = [];
+    for (let i = 0; i < n; i++) erp.push(round(stockRolling[i] - billRolling[i], 2));
+
+    const trace = {
+        x: erp, type: 'histogram', name: 'Rolling 12-Mo ERP',
+        marker: { color: '#0d47a166', line: { color: '#0d47a1', width: 1 } },
+        xbins: { size: 1 },
+        hovertemplate: '%{x:.0f}%: %{y} observations<extra></extra>',
+    };
+
+    const mean = erp.reduce((a,b) => a+b, 0) / erp.length;
+    const negPct = (erp.filter(r => r < 0).length / erp.length * 100).toFixed(0);
+
+    const layout = {
+        title: { text: 'Equity Risk Premium \u2014 Rolling 12-Month (1% bins, monthly)', font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Stocks minus T-Bills, Trailing 12 Months (%)', gridcolor: '#eee' },
+        yaxis: { title: 'Number of Months', gridcolor: '#eee' },
+        margin: { l: 50, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        showlegend: false,
+        shapes: [
+            { type: 'line', x0: 0, x1: 0, y0: 0, y1: 1, yref: 'paper',
+              line: { color: '#333', width: 2, dash: 'dash' } },
+            { type: 'line', x0: mean, x1: mean, y0: 0, y1: 1, yref: 'paper',
+              line: { color: '#0d47a1', width: 2, dash: 'dot' } },
+        ],
+        annotations: [
+            { x: mean, y: 1.02, yref: 'paper',
+              text: `Mean: ${mean.toFixed(1)}%`, showarrow: false,
+              font: { size: 11, color: '#0d47a1' } },
+        ],
+    };
+    Plotly.newPlot('chart-erp-hist', [trace], layout, plotCfg);
+
+    document.getElementById('erp-insight').innerHTML =
+        `<b>The equity risk premium is not guaranteed.</b> Over rolling 12-month windows, ` +
+        `stocks underperformed T-bills <b>${negPct}%</b> of the time. ` +
+        `The average ERP was <b>${mean.toFixed(1)}%</b>/year, but it ranged from ` +
+        `<b>${Math.min(...erp).toFixed(0)}%</b> to <b>+${Math.max(...erp).toFixed(0)}%</b>. ` +
+        `The risk premium only becomes reliable over long horizons \u2014 in any given year, stocks are a gamble.`;
+}
+
+/* ================================================================= */
+/* JAPAN STOCK MARKET                                                  */
+/* ================================================================= */
+// Nikkei 225 year-end levels (price index) + approx 2% dividend yield → total return
+const JAPAN_DATA = (function() {
+    // Nikkei 225 year-end closing prices (well-known published data)
+    const nikkei = {
+        1970:1987,1971:2714,1972:5208,1973:4307,1974:3817,1975:4359,1976:4991,
+        1977:4866,1978:6002,1979:6570,1980:7116,1981:7682,1982:8017,1983:9894,
+        1984:11543,1985:13113,1986:18701,1987:21564,1988:30159,1989:38916,
+        1990:23849,1991:22984,1992:16925,1993:17417,1994:19723,1995:19868,
+        1996:19361,1997:15259,1998:13842,1999:18934,2000:13786,2001:10543,
+        2002:8579,2003:10677,2004:11489,2005:16111,2006:17226,2007:15308,
+        2008:8860,2009:10546,2010:10229,2011:8455,2012:10395,2013:16291,
+        2014:17451,2015:19034,2016:19114,2017:22765,2018:20015,2019:23657,
+        2020:27444,2021:28792,2022:26095,2023:33464,2024:39895,2025:39000,
+    };
+    const years = Object.keys(nikkei).map(Number).sort();
+    // Compute total return: price return + ~2% dividend yield per year
+    const totalReturns = [];
+    const totalGrowth = [1.0]; // growth of ¥1
+    for (let i = 1; i < years.length; i++) {
+        const priceRet = (nikkei[years[i]] / nikkei[years[i-1]] - 1) * 100;
+        const totalRet = priceRet + 2.0; // approximate dividend yield
+        totalReturns.push(Math.round(totalRet * 100) / 100);
+        totalGrowth.push(totalGrowth[totalGrowth.length-1] * (1 + totalRet / 100));
+    }
+    return { years: years.slice(1), totalReturns, totalGrowth, allYears: years };
+})();
+
+function plotJapan() {
+    const j = JAPAN_DATA;
+    const traceJapan = {
+        x: j.allYears, y: j.totalGrowth, mode: 'lines', name: 'Japan (Nikkei + div)',
+        line: { color: '#d32f2f', width: 2.5 },
+        hovertemplate: 'Japan: \u00a5%{y:.2f}<extra></extra>',
+    };
+
+    // Also plot US growth of $1 for comparison (from annual data)
+    const usRets = DATA.assets.large_stocks.returns;
+    const usYears = DATA.years;
+    const startIdx = usYears.indexOf(1970);
+    const usGrowth = [1.0];
+    for (let i = startIdx; i < usRets.length; i++) {
+        usGrowth.push(usGrowth[usGrowth.length-1] * (1 + usRets[i] / 100));
+    }
+    const usYearsSlice = usYears.slice(startIdx);
+
+    const traceUS = {
+        x: [1970, ...usYearsSlice], y: usGrowth, mode: 'lines', name: 'U.S. (S&P 500)',
+        line: { color: '#0d47a1', width: 2.5 },
+        hovertemplate: 'US: $%{y:.2f}<extra></extra>',
+    };
+
+    const layout = {
+        title: { text: 'Japan vs U.S. \u2014 Growth of $1/\u00a51 (Total Returns, 1970\u20132025)', font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Year', gridcolor: '#eee', dtick: 5, tickformat: 'd' },
+        yaxis: { title: 'Value (log scale)', type: 'log', gridcolor: '#eee' },
+        showlegend: true,
+        legend: { x: .02, y: .98, bgcolor: 'rgba(255,255,255,.9)', bordercolor: '#ddd', borderwidth: 1, font: { size: 11 } },
+        margin: { l: 60, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        shapes: [
+            { type: 'line', x0: 1989, x1: 1989, y0: 0, y1: 1, yref: 'paper',
+              line: { color: '#d32f2f', width: 1.5, dash: 'dash' } },
+        ],
+        annotations: [
+            { x: 1989, y: .95, yref: 'paper', text: 'Nikkei peak<br>Dec 1989',
+              showarrow: false, font: { size: 10, color: '#d32f2f' }, xanchor: 'left', xshift: 4 },
+        ],
+    };
+    Plotly.newPlot('chart-japan', [traceJapan, traceUS], layout, plotCfg);
+
+    // Compute Japan stats
+    const jFinal = j.totalGrowth[j.totalGrowth.length - 1];
+    const jYrs = j.allYears.length - 1;
+    const jGeoMean = (Math.pow(jFinal, 1/jYrs) - 1) * 100;
+    // Peak was end of 1989 → index 19 (1989 - 1970)
+    const peakIdx = j.allYears.indexOf(1989);
+    const peakVal = j.totalGrowth[peakIdx];
+
+    document.getElementById('japan-insight').innerHTML =
+        `<b>Japan: a cautionary tale.</b> The Nikkei 225 peaked at the end of 1989 during one of history's greatest ` +
+        `asset bubbles. Even with dividends reinvested, \u00a51 invested in 1970 grew to ~<b>\u00a5${jFinal.toFixed(1)}</b> by 2025 ` +
+        `(geometric mean: <b>${jGeoMean.toFixed(1)}%</b>/year). ` +
+        `But an investor who bought at the 1989 peak waited <b>~35 years</b> to break even (including dividends). ` +
+        `Meanwhile, $1 in U.S. stocks grew to <b>$${usGrowth[usGrowth.length-1].toFixed(0)}</b> over the same period.` +
+        `<br><br><b>The lesson:</b> stocks don't always go up. Country-level risk is real. ` +
+        `The U.S. experience of the last century may be the exception, not the rule \u2014 a case of ` +
+        `<b>"survivorship bias"</b> in which we study the winners and assume their experience is universal. ` +
+        `Japan shows that even a major developed economy can experience a lost generation of returns.`;
+}
+
+/* ================================================================= */
+/* SHILLER CAPE                                                        */
+/* ================================================================= */
+// Shiller CAPE (Cyclically Adjusted P/E) year-end values
+// Source: Robert Shiller, "Irrational Exuberance" data
+const CAPE_DATA = {
+    years: [1927,1928,1929,1930,1931,1932,1933,1934,1935,1936,1937,1938,1939,1940,
+            1941,1942,1943,1944,1945,1946,1947,1948,1949,1950,1951,1952,1953,1954,
+            1955,1956,1957,1958,1959,1960,1961,1962,1963,1964,1965,1966,1967,1968,
+            1969,1970,1971,1972,1973,1974,1975,1976,1977,1978,1979,1980,1981,1982,
+            1983,1984,1985,1986,1987,1988,1989,1990,1991,1992,1993,1994,1995,1996,
+            1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,
+            2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025],
+    values: [17.1,21.2,27.1,15.8,10.4,6.6,10.1,10.5,11.7,15.8,11.5,13.5,13.3,11.0,
+             8.9,8.4,9.6,10.6,12.7,11.1,9.3,8.6,8.9,10.8,11.1,11.8,10.8,13.3,
+             16.0,14.8,12.0,16.7,17.2,16.6,19.2,17.3,18.6,20.0,22.2,18.9,20.2,20.5,
+             17.3,16.5,17.7,18.5,13.5,8.3,10.4,11.2,9.3,8.3,8.8,9.1,7.7,8.3,
+             10.1,9.5,11.4,13.7,13.8,14.1,16.8,15.2,19.2,19.3,20.1,18.6,22.2,25.1,
+             29.3,33.3,40.6,36.0,30.5,22.0,25.5,26.1,26.0,27.2,25.9,15.2,20.5,22.4,
+             20.4,21.2,25.1,26.5,25.9,27.9,32.1,28.3,30.3,33.3,38.3,28.3,30.9,37.0,36.0],
+};
+
+function plotCAPE() {
+    const c = CAPE_DATA;
+    const avg = c.values.reduce((a,b) => a+b, 0) / c.values.length;
+
+    const trace = {
+        x: c.years, y: c.values, mode: 'lines+markers', name: 'CAPE',
+        line: { color: '#0d47a1', width: 2.5 },
+        marker: { size: 3, color: '#0d47a1' },
+        hovertemplate: '%{x}: CAPE = %{y:.1f}<extra></extra>',
+    };
+
+    const layout = {
+        title: { text: 'Shiller CAPE Ratio (Cyclically Adjusted P/E)', font: { size: 15, color: '#333' } },
+        xaxis: { title: 'Year', gridcolor: '#eee', dtick: 10, tickformat: 'd' },
+        yaxis: { title: 'CAPE Ratio', gridcolor: '#eee', rangemode: 'tozero' },
+        margin: { l: 50, r: 24, t: 48, b: 52 },
+        plot_bgcolor: '#fafafa', paper_bgcolor: 'white',
+        showlegend: false,
+        shapes: [
+            // Long-run average line
+            { type: 'line', x0: c.years[0], x1: c.years[c.years.length-1],
+              y0: avg, y1: avg, line: { color: '#888', width: 1.5, dash: 'dash' } },
+        ],
+        annotations: [
+            { x: c.years[c.years.length-1], y: avg, text: `Avg: ${avg.toFixed(1)}`,
+              showarrow: false, font: { size: 10, color: '#888' }, xanchor: 'left', xshift: 4 },
+            { x: 2000, y: 41, text: 'Dot-com<br>bubble', showarrow: true, arrowhead: 2,
+              font: { size: 10, color: '#d32f2f' }, arrowcolor: '#d32f2f' },
+            { x: 1929, y: 28, text: '1929<br>peak', showarrow: true, arrowhead: 2,
+              font: { size: 10, color: '#d32f2f' }, arrowcolor: '#d32f2f' },
+            { x: 2021, y: 39, text: '2021<br>peak', showarrow: true, arrowhead: 2,
+              font: { size: 10, color: '#d32f2f' }, arrowcolor: '#d32f2f' },
+        ],
+    };
+    Plotly.newPlot('chart-cape', [trace], layout, plotCfg);
+
+    const current = c.values[c.values.length - 1];
+    document.getElementById('cape-insight').innerHTML =
+        `<b>Is the stock market overvalued?</b> The Shiller CAPE (price / 10-year avg earnings) is currently <b>${current.toFixed(0)}</b>, ` +
+        `well above its historical average of <b>${avg.toFixed(0)}</b>.` +
+        `<br><br><b>The rational explanation:</b> ` +
+        `Low interest rates since 2009 justify higher valuations \u2014 when bonds yield less, investors pay more for stocks. ` +
+        `Corporate profit margins have structurally increased (tech companies, globalization, less competition). ` +
+        `The economy is less volatile than in the 1930s\u20131950s, reducing the discount for risk. ` +
+        `Under this view, CAPE "should" be higher than in the past.` +
+        `<br><br><b>The irrational explanation:</b> ` +
+        `Every previous time CAPE was this high (1929, 2000), a major crash followed. ` +
+        `Investors extrapolate recent returns too far into the future ("<b>this time is different</b>"). ` +
+        `The tech/AI boom mirrors previous speculative episodes where new technology justified any price. ` +
+        `Passive investing may be pushing prices up regardless of fundamentals. ` +
+        `Under this view, we're in a bubble that will eventually correct.` +
+        `<br><br><b>We'll explore this debate further in the bubbles lecture (9b).</b>`;
+}
+
+/* ================================================================= */
+/* REFRESH ALL                                                        */
+/* ================================================================= */
+function refresh() {
+    const assetKey = document.getElementById('asset-select').value;
+    const real = document.getElementById('real-toggle').checked;
+
+    renderStatsTable(real);
+    plotBars(assetKey, real);
+    plotGrowth(real);
+    plotDrawdown(real);
+    plotRiskReturn(real);
+    plotHistogram(assetKey, real);
+    showInsight(assetKey, real);
+    plotRollingHist();
+    plotERPHist();
+    plotJapan();
+    plotCAPE();
+}
+</script>
+</body>
+</html>
